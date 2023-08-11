@@ -1,302 +1,92 @@
 import pygame
-from pygame.locals import *
+from fighter import Fighter
+from powerup import PowerUp
+from arena import Arena
 import random
 
-# Initialize pygame
 pygame.init()
-
-# Configuration
-SCREEN_WIDTH = 1000
-SCREEN_HEIGHT = 700
-FPS = 60
-WHITE = (255, 255, 255)
-BACKGROUND_COLOR = (50, 50, 50)
-
-# Fonts and pulsing effect
-pixel_font_big = pygame.font.Font("ActionComics.ttf", 74)
-pixel_font_small = pygame.font.Font("ActionComics.ttf", 24)
-
-# Password configurations
-password = ""
-input_box = pygame.Rect(300, 300, 140, 40)
-color_inactive = pygame.Color('lightskyblue3')
-color_active = pygame.Color('dodgerblue2')
-color = color_inactive
-active = False
-password_prompt_text = pixel_font_small.render('ENTER PASSWORD', True, WHITE)
-
-# Screen setup
+SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-pygame.display.set_caption("Pixel Punch")
+pygame.display.set_caption('PIXEL PUNCH')
+
+bg_image = pygame.image.load("background.jpeg")
+bg_image = pygame.transform.scale(bg_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
+
+font = pygame.font.Font('actioncomics.ttf', 36)
+title_text = font.render('PIXEL PUNCH', True, (255, 255, 255))
+start_text = font.render('PRESS ENTER', True, (255, 255, 255))
+
+player1 = Fighter(1, SCREEN_WIDTH * 0.25, SCREEN_HEIGHT - 190, 'player1.png')
+player2 = Fighter(2, SCREEN_WIDTH * 0.75, SCREEN_HEIGHT - 190, 'player2.png')
+
+arena = Arena()
+
+powerups = []
+
 clock = pygame.time.Clock()
-
-# Load sprites
-player_sprites = [f'sprite{i}.png' for i in range(1, 4)]
-all_sprites = [pygame.transform.scale(pygame.image.load(sprite_path).convert_alpha(), (100, 100)) for sprite_path in player_sprites]
-selected_sprite_index = 0
-
-class HealthBar:
-    def __init__(self, x, y, player):
-        self.x = x
-        self.y = y
-        self.player = player
-        self.max_health = 10
-        self.current_health = self.max_health
-        self.width = 100
-        self.height = 10
-        self.ai_decision_delay = 30
-        self.ai_decision_counter = 0
-
-    def draw(self, screen):
-        pygame.draw.rect(screen, (255, 0, 0), (self.x, self.y, self.width, self.height))
-        pygame.draw.rect(screen, (0, 255, 0), (self.x, self.y, self.width * (self.current_health / self.max_health), self.height))
-
-    def reduce_health(self, damage):
-        self.current_health -= damage
-        if self.current_health < 0:
-            self.current_health = 0
-
-class Player(pygame.sprite.Sprite):
-    def __init__(self, x, y, sprite, is_ai=False):
-        super().__init__()
-
-        self.image = sprite
-        self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
-        self.change_x = 0
-        self.change_y = 0
-        self.gravity = .5
-        self.jump_velocity = 0
-        self.jump_power = 20
-        self.ground = SCREEN_HEIGHT - self.rect.height
-        self.is_jumping = False
-        self.is_ai = is_ai
-        self.last_ability_use = pygame.time.get_ticks()
-        self.ability_cooldown = 5000  
-
-        if self.is_ai:
-            self.ai_decision_delay = 120
-            self.ai_decision_counter = 0
-
-    def can_use_ability(self):
-        current_time = pygame.time.get_ticks()
-        if current_time - self.last_ability_use >= self.ability_cooldown:
-            self.last_ability_use = current_time
-            return True
-        return False
-
-    def create_hitbox(self):
-        hitbox_margin = 20
-        hitbox = self.rect.inflate(hitbox_margin, hitbox_margin)
-        return hitbox
-
-    def can_damage_opponent(self, opponent):
-        return self.create_hitbox().colliderect(opponent.rect)
-
-    def damage_opponent(self, opponent):
-        if self.can_use_ability() and self.can_damage_opponent(opponent):
-            opponent.health_bar.reduce_health(1)
-
-    def update(self):
-    # Gravity effect
-        if self.is_jumping:
-            self.jump_velocity += self.gravity  # Increase velocity downwards due to gravity
-            self.change_y += self.jump_velocity
-        else:
-            self.change_y += self.gravity  # Apply gravity only when not jumping
-
-    # Update positions
-        self.rect.x += self.change_x
-        self.rect.y += self.change_y
-
-    # Check for ground contact
-        if self.rect.y >= self.ground:
-            self.rect.y = self.ground
-            self.change_y = 0
-            self.is_jumping = False
-
-        # Boundary checks
-        if self.rect.x < 0:
-            self.rect.x = 0
-        elif self.rect.x + self.rect.width > SCREEN_WIDTH:
-            self.rect.x = SCREEN_WIDTH - self.rect.width
-
-        if self.rect.y < 0:
-            self.rect.y = 0
-        elif self.rect.y + self.rect.height > self.ground:
-            self.rect.y = self.ground
-            self.is_jumping = False
-
-        # Basic AI for Player 2
-        if self.is_ai:
-            if self.ai_decision_counter == 0:
-                if random.randint(0, 1) == 0:
-                    if self.rect.x < player1.rect.x:
-                        self.go_right()
-                    else:
-                        self.go_left()
-                self.ai_decision_counter = self.ai_decision_delay
-            else:
-                self.ai_decision_counter -= 1
-
-    def invert_colors(self):
-        inverted_image = pygame.Surface(self.image.get_size())
-        pygame.surfarray.blit_array(inverted_image, 255 - pygame.surfarray.array3d(self.image))
-        self.image = inverted_image.convert_alpha()
-        pygame.time.set_timer(pygame.USEREVENT, 5000)
-
-    def reset_colors(self, sprite_path):
-        self.image = pygame.transform.scale(pygame.image.load(sprite_path).convert_alpha(), (100, 100))
-
-    def go_left(self):
-        self.change_x = -5
-
-    def go_right(self):
-        self.change_x = 5
-
-    def stop(self):
-        self.change_x = 0
-
-    def jump(self):
-        if self.rect.y == self.ground and not self.is_jumping:
-            self.jump_velocity = -self.jump_power  # Negative because pygame's Y axis is top-down
-            self.is_jumping = True
-
-
-
-
-# screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-# pygame.display.set_caption("Pixel Punch")
-# clock = pygame.time.Clock()
-
-# Setup Players and HealthBars
-player1 = Player(100, SCREEN_HEIGHT - 100, all_sprites[0])
-player2 = Player(700, SCREEN_HEIGHT - 100, all_sprites[1], is_ai=True)
-player1_health_bar = HealthBar(50, 50, player1)
-player2_health_bar = HealthBar(SCREEN_WIDTH - 150, 50, player2)
-player1.health_bar = player1_health_bar
-player2.health_bar = player2_health_bar
-
-state = "START_PAGE"
-pulse_title_text = None
-current_font_size = 70
-pulse_direction = 1
-min_font_size = 70
-max_font_size = 78
-
-# Main game loop
 running = True
+in_start_page = True
+
+spawn_timer = 300
+
 while running:
-    screen.fill(BACKGROUND_COLOR)
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        player1.handle_event(event, player2)
+        player2.handle_event(event, player1)
 
-    # Handling for the start page
-    if state == "START_PAGE":
-        if current_font_size > max_font_size or current_font_size < min_font_size:
-            pulse_direction *= -1
-        if pulse_direction == 1 and current_font_size == min_font_size:
-            pulse_font = pygame.font.Font("ActionComics.ttf", current_font_size)
-        if pulse_direction == -1 and current_font_size == max_font_size:
-            pulse_font = pygame.font.Font("ActionComics.ttf", current_font_size)
-        current_font_size += pulse_direction
-        pulse_title_text = pulse_font.render('PIXEL PUNCH', True, (173, 216, 230))
+    keys = pygame.key.get_pressed()
 
-        for event in pygame.event.get():
-            if event.type == QUIT: running = False
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if input_box.collidepoint(event.pos):
-                    active = not active
-                else:
-                    active = False
-                color = color_active if active else color_inactive
-            if event.type == pygame.KEYDOWN:
-                if active:
-                    if event.key == pygame.K_RETURN:
-                        if password == "taha":
-                            state = "CHARACTER_SELECT"
-                            password = ""
-                        else:
-                            password = ""
-                    elif event.key == pygame.K_BACKSPACE:
-                        password = password[:-1]
-                    else:
-                        password += event.unicode
+    if in_start_page:
+        if keys[pygame.K_RETURN]:
+            in_start_page = False
+        screen.blit(bg_image, (0, 0))
+        screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, SCREEN_HEIGHT//4))
+        screen.blit(start_text, (SCREEN_WIDTH//2 - start_text.get_width()//2, SCREEN_HEIGHT//2))
+    else:
+        # Movement
+        player1.move(keys)
+        player2.move(keys)
 
-        screen.fill((50, 50, 50))
-        screen.blit(pulse_title_text, (SCREEN_WIDTH // 2 - pulse_title_text.get_width() // 2, SCREEN_HEIGHT // 2 - 150))
-        
-        password_prompt_position_y = SCREEN_HEIGHT // 2 + 20 
-        screen.blit(password_prompt_text, (SCREEN_WIDTH // 2 - password_prompt_text.get_width() // 2, password_prompt_position_y))
-        
-        input_box.topleft = (SCREEN_WIDTH // 2 - input_box.width // 2, password_prompt_position_y + password_prompt_text.get_height() + 10)
-        
-        txt_surface = pixel_font_small.render(password, True, color)
-        screen.blit(txt_surface, (input_box.x + 5, input_box.y + 5))
-        pygame.draw.rect(screen, color, input_box, 2)
+        # Draw
+        screen.blit(bg_image, (0, 0))
+        arena.draw(screen)
+        player1.draw(screen)
+        player1.draw_health_bar(screen)
+        player2.draw(screen)
+        player2.draw_health_bar(screen)
 
-    # Handling for the character selection screen
-    elif state == "CHARACTER_SELECT":
-        for event in pygame.event.get():
-            if event.type == QUIT:
-                running = False
-            elif event.type == KEYDOWN:
-                if event.key == K_LEFT and selected_sprite_index > 0:
-                    selected_sprite_index -= 1
-                elif event.key == K_RIGHT and selected_sprite_index < len(all_sprites) - 1:
-                    selected_sprite_index += 1
-                elif event.key == K_RETURN:
-                    chosen_sprite = all_sprites[selected_sprite_index]
-                    player1.image = chosen_sprite
-                    state = "MAIN_GAME"
+        for powerup in powerups:
+            powerup.draw(screen)
 
-        for i, sprite in enumerate(all_sprites):
-            position = (i * 110 + 100, SCREEN_HEIGHT // 2 - 50)
-            screen.blit(sprite, position)
-            if i == selected_sprite_index:
-                pygame.draw.rect(screen, (255, 0, 0), (position[0]-5, position[1]-5, 110, 110), 5)  # Highlight the selected sprite with a red border
+        # Check win condition
+        if player1.health <= 0:
+            print("Player 2 wins!")
+            running = False
+        elif player2.health <= 0:
+            print("Player 1 wins!")
+            running = False
 
+        # Arena collisions
+        arena.check_collisions(player1)
+        arena.check_collisions(player2)
 
-    # Handling for the main game
-    elif state == "MAIN_GAME":
-        for event in pygame.event.get():
-            if event.type == QUIT: 
-                running = False
-            elif event.type == KEYDOWN:
-                # Player 1 Controls
-                if event.key == K_a: 
-                    player1.go_left()
-                elif event.key == K_d: 
-                    player1.go_right()
-                elif event.key == K_w: 
-                    player1.is_jumping = True
-                elif event.key == K_s: 
-                    player1.damage_opponent(player2)  # Player 1 damages Player 2
+        # Powerup mechanism
+        spawn_timer -= 1
+        if spawn_timer <= 0:
+            powerups.append(PowerUp())
+            spawn_timer = random.randint(200, 400)
 
-                # Player 2 Controls (Human control)
-                # if event.key == K_LEFT: player2.go_left()
-                # elif event.key == K_RIGHT: player2.go_right()
-                # elif event.key == K_UP: player2.jump()
-
-            elif event.type == KEYUP:
-                if event.key in [K_a, K_d]: 
-                    player1.stop()
-                elif event.key in [K_LEFT, K_RIGHT]: 
-                    player2.stop()
-
-            elif event.type == pygame.USEREVENT:
-                player2.reset_colors(player_sprites[1])
-        screen.fill(BACKGROUND_COLOR)
-
-
-        # Drawing and updating
-        player1.update()
-        player2.update()
-        player1_health_bar.draw(screen)
-        player2_health_bar.draw(screen)
-        screen.blit(player1.image, player1.rect)
-        screen.blit(player2.image, player2.rect)
+        for powerup in powerups:
+            if player1.rect.colliderect(powerup.rect):
+                powerup.apply(player1)
+                powerups.remove(powerup)
+            elif player2.rect.colliderect(powerup.rect):
+                powerup.apply(player2)
+                powerups.remove(powerup)
 
     pygame.display.flip()
-    clock.tick(FPS)
+    clock.tick(60)
 
 pygame.quit()
