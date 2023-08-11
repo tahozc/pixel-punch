@@ -1,1 +1,5 @@
+# Virtual Environment Dependencies
 .venv/
+
+# Pipfile Lock
+Pipfile.lock
