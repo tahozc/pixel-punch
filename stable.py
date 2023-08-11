@@ -66,16 +66,17 @@ class Player(pygame.sprite.Sprite):
         self.rect.y = y
         self.change_x = 0
         self.change_y = 0
-        self.gravity = 1
+        self.gravity = .5
+        self.jump_velocity = 0
+        self.jump_power = 20
         self.ground = SCREEN_HEIGHT - self.rect.height
         self.is_jumping = False
         self.is_ai = is_ai
         self.last_ability_use = pygame.time.get_ticks()
-        self.ability_cooldown = 5000  # 5000 milliseconds = 5 seconds
-        
-        # Add AI-related attributes here
+        self.ability_cooldown = 5000  
+
         if self.is_ai:
-            self.ai_decision_delay = 30
+            self.ai_decision_delay = 120
             self.ai_decision_counter = 0
 
     def can_use_ability(self):
@@ -85,20 +86,47 @@ class Player(pygame.sprite.Sprite):
             return True
         return False
 
+    def create_hitbox(self):
+        hitbox_margin = 20
+        hitbox = self.rect.inflate(hitbox_margin, hitbox_margin)
+        return hitbox
+
+    def can_damage_opponent(self, opponent):
+        return self.create_hitbox().colliderect(opponent.rect)
+
     def damage_opponent(self, opponent):
-        if self.can_use_ability():
+        if self.can_use_ability() and self.can_damage_opponent(opponent):
             opponent.health_bar.reduce_health(1)
 
     def update(self):
-        # Gravity effect and basic movement
-        if self.rect.y < self.ground:
-            self.change_y += self.gravity
-        elif self.change_y > 0:
-            self.is_jumping = False
-            self.change_y = 0
-            self.rect.y = self.ground
+    # Gravity effect
+        if self.is_jumping:
+            self.jump_velocity += self.gravity  # Increase velocity downwards due to gravity
+            self.change_y += self.jump_velocity
+        else:
+            self.change_y += self.gravity  # Apply gravity only when not jumping
+
+    # Update positions
         self.rect.x += self.change_x
         self.rect.y += self.change_y
+
+    # Check for ground contact
+        if self.rect.y >= self.ground:
+            self.rect.y = self.ground
+            self.change_y = 0
+            self.is_jumping = False
+
+        # Boundary checks
+        if self.rect.x < 0:
+            self.rect.x = 0
+        elif self.rect.x + self.rect.width > SCREEN_WIDTH:
+            self.rect.x = SCREEN_WIDTH - self.rect.width
+
+        if self.rect.y < 0:
+            self.rect.y = 0
+        elif self.rect.y + self.rect.height > self.ground:
+            self.rect.y = self.ground
+            self.is_jumping = False
 
         # Basic AI for Player 2
         if self.is_ai:
@@ -111,25 +139,6 @@ class Player(pygame.sprite.Sprite):
                 self.ai_decision_counter = self.ai_decision_delay
             else:
                 self.ai_decision_counter -= 1
-                
-    def collide_with(self, other_player):
-        if self.rect.colliderect(other_player.rect):
-            dx = self.rect.centerx - other_player.rect.centerx
-            dy = self.rect.centery - other_player.rect.centery
-
-            if abs(dx) > abs(dy):
-                if dx > 0:
-                    self.rect.left = other_player.rect.right
-                else:
-                    self.rect.right = other_player.rect.left
-            else:
-                if self.rect.bottom > other_player.rect.bottom:
-                    self.rect.bottom = other_player.rect.top
-                    self.change_y = 0  # prevent further falling
-                else:
-                    self.rect.top = other_player.rect.bottom
-                self.change_y = 0
-
 
     def invert_colors(self):
         inverted_image = pygame.Surface(self.image.get_size())
@@ -140,18 +149,21 @@ class Player(pygame.sprite.Sprite):
     def reset_colors(self, sprite_path):
         self.image = pygame.transform.scale(pygame.image.load(sprite_path).convert_alpha(), (100, 100))
 
-    def go_left(self): 
+    def go_left(self):
         self.change_x = -5
 
-    def go_right(self): 
+    def go_right(self):
         self.change_x = 5
 
-    def stop(self): 
+    def stop(self):
         self.change_x = 0
 
     def jump(self):
-        if self.rect.y == self.ground:
-            self.change_y = -15
+        if self.rect.y == self.ground and not self.is_jumping:
+            self.jump_velocity = -self.jump_power  # Negative because pygame's Y axis is top-down
+            self.is_jumping = True
+
+
 
 
 # screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -213,7 +225,7 @@ while running:
         screen.fill((50, 50, 50))
         screen.blit(pulse_title_text, (SCREEN_WIDTH // 2 - pulse_title_text.get_width() // 2, SCREEN_HEIGHT // 2 - 150))
         
-        password_prompt_position_y = SCREEN_HEIGHT // 2 + 20  # Adjust this value if needed
+        password_prompt_position_y = SCREEN_HEIGHT // 2 + 20 
         screen.blit(password_prompt_text, (SCREEN_WIDTH // 2 - password_prompt_text.get_width() // 2, password_prompt_position_y))
         
         input_box.topleft = (SCREEN_WIDTH // 2 - input_box.width // 2, password_prompt_position_y + password_prompt_text.get_height() + 10)
@@ -237,7 +249,6 @@ while running:
                     player1.image = chosen_sprite
                     state = "MAIN_GAME"
 
-        # Drawing the sprites for selection
         for i, sprite in enumerate(all_sprites):
             position = (i * 110 + 100, SCREEN_HEIGHT // 2 - 50)
             screen.blit(sprite, position)
@@ -257,7 +268,7 @@ while running:
                 elif event.key == K_d: 
                     player1.go_right()
                 elif event.key == K_w: 
-                    player1.jump()
+                    player1.is_jumping = True
                 elif event.key == K_s: 
                     player1.damage_opponent(player2)  # Player 1 damages Player 2
 
@@ -276,9 +287,6 @@ while running:
                 player2.reset_colors(player_sprites[1])
         screen.fill(BACKGROUND_COLOR)
 
-        # Player collision
-        player1.collide_with(player2)
-        player2.collide_with(player1)
 
         # Drawing and updating
         player1.update()
@@ -292,4 +300,3 @@ while running:
     clock.tick(FPS)
 
 pygame.quit()
-
