@@ -6,6 +6,7 @@ Pipfile.lock
 
 # Old Stable Version (No Longer Needed)
 legacy.py
+stable.py
 
 # Cached Python Config Files
 __pycache__/
